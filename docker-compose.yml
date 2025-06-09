@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  soc-automation-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soc-automation-bot
+    ports:
+      - "5000:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SOC_CONFIG_PATH=/app/soc_config.json
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./config:/app/config
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - soc-network
+
+  # Optional: Add a reverse proxy (nginx)
+  nginx:
+    image: nginx:alpine
+    container_name: soc-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - soc-automation-bot
+    networks:
+      - soc-network
+    profiles:
+      - production
+
+networks:
+  soc-network:
+    driver: bridge
+
+volumes:
+  soc-logs:
+    driver: local
+  soc-data:
+    driver: local
+  soc-models:
+    driver: local 

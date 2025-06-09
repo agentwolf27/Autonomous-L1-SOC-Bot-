@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Generated Data Files
+*.csv
+*.json
+*.log
+*.pkl
+
+# Specific generated files
+action_log.json
+blocked_ips.json
+email_alerts.log
+incident_tickets.json
+monitoring_queue.json
+processed_alerts_*.csv
+soc_alerts.log
+soc_automation.log
+triage_model.pkl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary directories
+data/temp/
+logs/temp/
+config/temp/
+
+# Docker
+.dockerignore
+
+# Environment variables
+.env
+.env.local
+.env.production 
