@@ -194,14 +194,14 @@ def enrich_single_alert(row):
     # Calculate threat score based on various factors
     threat_score = 0
     threat_score += min(source_abuse_score, 50)  # Cap at 50
-    threat_score += min(dest_abuse_score, 30)    # Cap at 30
+    threat_score += min(dest_abuse_score, 30)  # Cap at 30
     if source_whois["country"] in ["RU", "CN", "IR", "KP"]:
         threat_score += 20
     if len(risk_factors) > 2:
         threat_score += 15
     if row["severity"] in ["High", "Critical"]:
         threat_score += 10
-    
+
     # Normalize to 0-100
     threat_score = min(threat_score, 100)
 

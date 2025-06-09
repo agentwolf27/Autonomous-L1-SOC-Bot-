@@ -371,9 +371,9 @@ def execute_actions(triaged_df):
             **triaged_df,
             "actions_taken": ", ".join(executed_actions),
             "action_timestamp": datetime.now(),
-            "action_status": "Completed" if executed_actions else "Failed"
+            "action_status": "Completed" if executed_actions else "Failed",
         }
-    
+
     # Handle DataFrame (normal operation)
     logger.info(f"Starting response actions for {len(triaged_df)} alerts")
 

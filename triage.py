@@ -271,11 +271,11 @@ def triage(df):
         logger.warning("Empty DataFrame provided for triage")
         empty_df = df.copy()
         # Add expected columns with appropriate types
-        empty_df["risk_level"] = pd.Series(dtype='object')
-        empty_df["risk_score"] = pd.Series(dtype='float64')
-        empty_df["triage_timestamp"] = pd.Series(dtype='datetime64[ns]')
-        empty_df["confidence"] = pd.Series(dtype='float64')
-        empty_df["priority"] = pd.Series(dtype='int64')
+        empty_df["risk_level"] = pd.Series(dtype="object")
+        empty_df["risk_score"] = pd.Series(dtype="float64")
+        empty_df["triage_timestamp"] = pd.Series(dtype="datetime64[ns]")
+        empty_df["confidence"] = pd.Series(dtype="float64")
+        empty_df["priority"] = pd.Series(dtype="int64")
         return empty_df
 
     # Create triage classifier
@@ -303,7 +303,7 @@ def triage(df):
     # Add predictions to DataFrame
     triaged_df["risk_level"] = risk_levels
     # Handle both numpy arrays and lists
-    if hasattr(risk_scores, 'round'):
+    if hasattr(risk_scores, "round"):
         triaged_df["risk_score"] = risk_scores.round(2)
     else:
         triaged_df["risk_score"] = [round(score, 2) for score in risk_scores]
@@ -326,10 +326,10 @@ def triage(df):
     try:
         condition = False
         if "source_abuse_score" in triaged_df.columns:
-            condition |= (triaged_df["source_abuse_score"] > 90)
+            condition |= triaged_df["source_abuse_score"] > 90
         if "event_type" in triaged_df.columns:
-            condition |= (triaged_df["event_type"] == "Malware Detection")
-        
+            condition |= triaged_df["event_type"] == "Malware Detection"
+
         if condition is not False:  # Only apply if we have valid conditions
             triaged_df.loc[condition, "priority"] = 1
     except Exception as e:
