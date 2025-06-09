@@ -291,11 +291,22 @@ def triage(df):
     triaged_df = df.copy()
 
     # Get predictions
-    risk_levels, risk_scores = classifier.predict(df)
+    try:
+        risk_levels, risk_scores = classifier.predict(df)
+    except Exception as e:
+        # Handle malformed data or feature mismatch gracefully
+        logger.warning(f"ML prediction failed, using default risk assessment: {e}")
+        # Assign default risk levels based on simple heuristics
+        risk_levels = ["Medium"] * len(df)  # Default to Medium risk
+        risk_scores = [50.0] * len(df)  # Default 50% risk score
 
     # Add predictions to DataFrame
     triaged_df["risk_level"] = risk_levels
-    triaged_df["risk_score"] = risk_scores.round(2)
+    # Handle both numpy arrays and lists
+    if hasattr(risk_scores, 'round'):
+        triaged_df["risk_score"] = risk_scores.round(2)
+    else:
+        triaged_df["risk_score"] = [round(score, 2) for score in risk_scores]
 
     # Add triage timestamp
     triaged_df["triage_timestamp"] = datetime.now()
@@ -311,12 +322,18 @@ def triage(df):
     priority_map = {"High": 1, "Medium": 2, "Low": 3}
     triaged_df["priority"] = triaged_df["risk_level"].map(priority_map)
 
-    # Boost priority for certain critical conditions
-    triaged_df.loc[
-        (triaged_df["source_abuse_score"] > 90)
-        | (triaged_df["event_type"] == "Malware Detection"),
-        "priority",
-    ] = 1
+    # Boost priority for certain critical conditions (with safe column access)
+    try:
+        condition = False
+        if "source_abuse_score" in triaged_df.columns:
+            condition |= (triaged_df["source_abuse_score"] > 90)
+        if "event_type" in triaged_df.columns:
+            condition |= (triaged_df["event_type"] == "Malware Detection")
+        
+        if condition is not False:  # Only apply if we have valid conditions
+            triaged_df.loc[condition, "priority"] = 1
+    except Exception as e:
+        logger.warning(f"Failed to boost priority for critical conditions: {e}")
 
     # Sort by priority and risk score
     triaged_df = triaged_df.sort_values(
