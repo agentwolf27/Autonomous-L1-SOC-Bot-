@@ -191,6 +191,20 @@ def enrich_single_alert(row):
     if row["severity"] in ["High", "Critical"]:
         risk_factors.append("High Severity")
 
+    # Calculate threat score based on various factors
+    threat_score = 0
+    threat_score += min(source_abuse_score, 50)  # Cap at 50
+    threat_score += min(dest_abuse_score, 30)    # Cap at 30
+    if source_whois["country"] in ["RU", "CN", "IR", "KP"]:
+        threat_score += 20
+    if len(risk_factors) > 2:
+        threat_score += 15
+    if row["severity"] in ["High", "Critical"]:
+        threat_score += 10
+    
+    # Normalize to 0-100
+    threat_score = min(threat_score, 100)
+
     return {
         "source_whois_org": source_whois["organization"],
         "source_whois_country": source_whois["country"],
@@ -204,6 +218,8 @@ def enrich_single_alert(row):
         "is_internal_traffic": is_private_ip(source_ip) and is_private_ip(dest_ip),
         "external_source": not is_private_ip(source_ip),
         "external_dest": not is_private_ip(dest_ip),
+        "threat_score": threat_score,
+        "geo_country": source_whois["country"],  # Add geo_country for tests
     }
 
 
@@ -218,6 +234,11 @@ def enrich_alerts(df):
         Enhanced DataFrame with additional columns
     """
     logger.info(f"Starting enrichment for {len(df)} alerts")
+
+    # Handle empty DataFrame
+    if df.empty:
+        logger.warning("Empty DataFrame provided for enrichment")
+        return df.copy()
 
     # Create a copy to avoid modifying original
     enriched_df = df.copy()
@@ -236,6 +257,8 @@ def enrich_alerts(df):
         "is_internal_traffic",
         "external_source",
         "external_dest",
+        "threat_score",
+        "geo_country",
     ]
 
     for col in enrichment_columns:

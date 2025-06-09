@@ -358,11 +358,23 @@ def execute_actions(triaged_df):
     Main response function that executes actions based on alert risk levels
 
     Args:
-        triaged_df: DataFrame with triaged alerts containing risk_level column
+        triaged_df: DataFrame with triaged alerts containing risk_level column OR single alert dict
 
     Returns:
-        DataFrame with added action and action_timestamp columns
+        DataFrame with added action and action_timestamp columns OR dict for single alert
     """
+    # Handle single alert dict (for tests)
+    if isinstance(triaged_df, dict):
+        response_engine = ResponseEngine()
+        executed_actions = response_engine.execute_actions_for_alert(triaged_df)
+        return {
+            **triaged_df,
+            "actions_taken": ", ".join(executed_actions),
+            "action_timestamp": datetime.now(),
+            "action_status": "Completed" if executed_actions else "Failed"
+        }
+    
+    # Handle DataFrame (normal operation)
     logger.info(f"Starting response actions for {len(triaged_df)} alerts")
 
     response_engine = ResponseEngine()

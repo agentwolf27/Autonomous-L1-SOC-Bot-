@@ -58,6 +58,7 @@ class SOCAutomationBot:
         self, config_path: str = "soc_config.json", enterprise_mode: bool = False
     ):
         self.config = self.load_default_config()
+        self.logger = logger  # Add logger attribute for tests
         self.running = False
         self.dashboard_thread = None
         self.processing_stats = {
@@ -315,6 +316,10 @@ class SOCAutomationBot:
             print("=" * 60)
 
         return result
+
+    def run_pipeline_once(self):
+        """Alias for run_once method for test compatibility"""
+        return self.run_once()
 
     def print_stats(self):
         """Print current statistics"""
