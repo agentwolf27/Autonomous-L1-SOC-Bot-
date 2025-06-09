@@ -18,109 +18,125 @@ app = Flask(__name__)
 latest_alerts_data = None
 last_update = None
 
+
 def load_data():
     """Load and process the latest alert data"""
     global latest_alerts_data, last_update
-    
+
     try:
         # Ingest alerts
         raw_alerts = ingest_alerts()
-        
+
         # Enrich alerts
         enriched_alerts = enrich_alerts(raw_alerts)
-        
+
         # Triage alerts
         triaged_alerts = triage(enriched_alerts)
-        
+
         # Execute response actions
         processed_alerts = execute_actions(triaged_alerts)
-        
+
         latest_alerts_data = {
-            'raw': raw_alerts,
-            'enriched': enriched_alerts,
-            'triaged': triaged_alerts,
-            'processed': processed_alerts
+            "raw": raw_alerts,
+            "enriched": enriched_alerts,
+            "triaged": triaged_alerts,
+            "processed": processed_alerts,
         }
-        
+
         last_update = datetime.now()
         logger.info(f"Data loaded successfully at {last_update}")
-        
+
         return latest_alerts_data
-        
+
     except Exception as e:
         logger.error(f"Failed to load data: {e}")
         return None
+
 
 def get_metrics():
     """Calculate SOC metrics"""
     if not latest_alerts_data:
         return {}
-    
-    processed_df = latest_alerts_data['processed']
-    
+
+    processed_df = latest_alerts_data["processed"]
+
     # Basic metrics
     total_alerts = len(processed_df)
-    high_risk_alerts = len(processed_df[processed_df['risk_level'] == 'High'])
-    medium_risk_alerts = len(processed_df[processed_df['risk_level'] == 'Medium'])
-    low_risk_alerts = len(processed_df[processed_df['risk_level'] == 'Low'])
-    
+    high_risk_alerts = len(processed_df[processed_df["risk_level"] == "High"])
+    medium_risk_alerts = len(processed_df[processed_df["risk_level"] == "Medium"])
+    low_risk_alerts = len(processed_df[processed_df["risk_level"] == "Low"])
+
     # Calculate percentages
     high_risk_pct = (high_risk_alerts / total_alerts * 100) if total_alerts > 0 else 0
-    
+
     # Response metrics
-    tickets_created = len(processed_df[processed_df['actions_taken'].str.contains('create_ticket', na=False)])
-    ips_blocked = len(processed_df[processed_df['actions_taken'].str.contains('block_ip', na=False)])
-    emails_sent = len(processed_df[processed_df['actions_taken'].str.contains('email_alert', na=False)])
-    
+    tickets_created = len(
+        processed_df[
+            processed_df["actions_taken"].str.contains("create_ticket", na=False)
+        ]
+    )
+    ips_blocked = len(
+        processed_df[processed_df["actions_taken"].str.contains("block_ip", na=False)]
+    )
+    emails_sent = len(
+        processed_df[
+            processed_df["actions_taken"].str.contains("email_alert", na=False)
+        ]
+    )
+
     # Time-based metrics (simulated)
     avg_detection_time = 5.2  # minutes
     avg_response_time = 12.8  # minutes
-    
+
     # Risk score stats
-    avg_risk_score = processed_df['risk_score'].mean() if not processed_df.empty else 0
-    max_risk_score = processed_df['risk_score'].max() if not processed_df.empty else 0
-    
+    avg_risk_score = processed_df["risk_score"].mean() if not processed_df.empty else 0
+    max_risk_score = processed_df["risk_score"].max() if not processed_df.empty else 0
+
     return {
-        'total_alerts': total_alerts,
-        'high_risk_alerts': high_risk_alerts,
-        'medium_risk_alerts': medium_risk_alerts,
-        'low_risk_alerts': low_risk_alerts,
-        'high_risk_percentage': round(high_risk_pct, 1),
-        'tickets_created': tickets_created,
-        'ips_blocked': ips_blocked,
-        'emails_sent': emails_sent,
-        'avg_detection_time': avg_detection_time,
-        'avg_response_time': avg_response_time,
-        'avg_risk_score': round(avg_risk_score, 1),
-        'max_risk_score': round(max_risk_score, 1),
-        'last_update': last_update.strftime('%Y-%m-%d %H:%M:%S') if last_update else 'Never'
+        "total_alerts": total_alerts,
+        "high_risk_alerts": high_risk_alerts,
+        "medium_risk_alerts": medium_risk_alerts,
+        "low_risk_alerts": low_risk_alerts,
+        "high_risk_percentage": round(high_risk_pct, 1),
+        "tickets_created": tickets_created,
+        "ips_blocked": ips_blocked,
+        "emails_sent": emails_sent,
+        "avg_detection_time": avg_detection_time,
+        "avg_response_time": avg_response_time,
+        "avg_risk_score": round(avg_risk_score, 1),
+        "max_risk_score": round(max_risk_score, 1),
+        "last_update": (
+            last_update.strftime("%Y-%m-%d %H:%M:%S") if last_update else "Never"
+        ),
     }
 
-def get_alert_data_for_table(data_type='processed', limit=100):
+
+def get_alert_data_for_table(data_type="processed", limit=100):
     """Get alert data formatted for tables"""
     if not latest_alerts_data or data_type not in latest_alerts_data:
         return []
-    
+
     df = latest_alerts_data[data_type].copy()
-    
+
     if df.empty:
         return []
-    
+
     # Limit results
     df = df.head(limit)
-    
+
     # Convert timestamps to strings
-    if 'timestamp' in df.columns:
-        df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
-    
+    if "timestamp" in df.columns:
+        df["timestamp"] = df["timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
+
     # Handle other datetime columns
-    datetime_cols = ['triage_timestamp', 'action_timestamp']
+    datetime_cols = ["triage_timestamp", "action_timestamp"]
     for col in datetime_cols:
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col]).dt.strftime('%Y-%m-%d %H:%M:%S')
-    
+            df[col] = pd.to_datetime(df[col]).dt.strftime("%Y-%m-%d %H:%M:%S")
+
     # Convert to list of dictionaries
-    return df.to_dict('records')
+    return df.to_dict("records")
+
 
 # HTML template as string (for simplicity)
 DASHBOARD_TEMPLATE = """
@@ -513,40 +529,43 @@ DASHBOARD_TEMPLATE = """
 </html>
 """
 
-@app.route('/')
+
+@app.route("/")
 def dashboard():
     """Render the main dashboard"""
     return DASHBOARD_TEMPLATE
 
-@app.route('/api/data')
+
+@app.route("/api/data")
 def api_data():
     """API endpoint to get latest alert data and metrics"""
     try:
         # Load fresh data
         load_data()
-        
+
         if not latest_alerts_data:
-            return jsonify({'error': 'No data available'}), 500
-        
+            return jsonify({"error": "No data available"}), 500
+
         # Get metrics
         metrics = get_metrics()
-        
+
         # Get table data
         response_data = {
-            'metrics': metrics,
-            'raw': get_alert_data_for_table('raw'),
-            'enriched': get_alert_data_for_table('enriched'),
-            'triaged': get_alert_data_for_table('triaged'),
-            'processed': get_alert_data_for_table('processed')
+            "metrics": metrics,
+            "raw": get_alert_data_for_table("raw"),
+            "enriched": get_alert_data_for_table("enriched"),
+            "triaged": get_alert_data_for_table("triaged"),
+            "processed": get_alert_data_for_table("processed"),
         }
-        
+
         return jsonify(response_data)
-        
+
     except Exception as e:
         logger.error(f"API error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/metrics')
+
+@app.route("/api/metrics")
 def api_metrics():
     """API endpoint for just metrics"""
     try:
@@ -554,26 +573,29 @@ def api_metrics():
         return jsonify(metrics)
     except Exception as e:
         logger.error(f"Metrics API error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/refresh')
+
+@app.route("/api/refresh")
 def api_refresh():
     """API endpoint to force data refresh"""
     try:
         load_data()
-        return jsonify({'status': 'success', 'message': 'Data refreshed successfully'})
+        return jsonify({"status": "success", "message": "Data refreshed successfully"})
     except Exception as e:
         logger.error(f"Refresh API error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-def run_dashboard(host='0.0.0.0', port=5000, debug=False):
+
+def run_dashboard(host="0.0.0.0", port=5000, debug=False):
     """Run the Flask dashboard"""
     logger.info(f"Starting SOC Dashboard on http://{host}:{port}")
-    
+
     # Load initial data
     load_data()
-    
+
     app.run(host=host, port=port, debug=debug)
 
-if __name__ == '__main__':
-    run_dashboard(debug=True) 
+
+if __name__ == "__main__":
+    run_dashboard(debug=True)
