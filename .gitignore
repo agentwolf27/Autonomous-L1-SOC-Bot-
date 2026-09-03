@@ -72,4 +72,6 @@ config/temp/
 .env
 .env.local
 .env.production
-graphify-out/
+graphify-out/*
+!graphify-out/GRAPH_REPORT.md
+!graphify-out/.graphify_labels.json
