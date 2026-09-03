@@ -71,4 +71,5 @@ config/temp/
 # Environment variables
 .env
 .env.local
-.env.production 
+.env.production
+graphify-out/
