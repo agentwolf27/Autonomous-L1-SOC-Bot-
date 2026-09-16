@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 REFERENCE_TRAINING_ALERTS = 2000
 REFERENCE_TRAINING_SEED = 42
 
+# Encoded value for a categorical value the model never saw in training
+UNSEEN_CATEGORY_CODE = -1
+
 
 class AlertTriageClassifier:
     def __init__(self):
@@ -115,25 +118,24 @@ class AlertTriageClassifier:
         # Encode categorical variables
         for col in self.categorical_columns:
             if col in features_df.columns:
+                values = features_df[col].astype(str)
                 if col not in self.label_encoders:
-                    self.label_encoders[col] = LabelEncoder()
-                    # Fit on the data
-                    self.label_encoders[col].fit(features_df[col].astype(str))
+                    self.label_encoders[col] = LabelEncoder().fit(values)
 
-                try:
-                    features_df[f"{col}_encoded"] = self.label_encoders[col].transform(
-                        features_df[col].astype(str)
+                # A label's code is its position in the sorted classes_, as transform() gives.
+                # Unseen labels get a sentinel instead of a refit: refitting re-sorts classes_
+                # and shifts the codes of every category the model was trained on.
+                codes = pd.Index(self.label_encoders[col].classes_).get_indexer(values)
+                unseen = codes == -1  # get_indexer's marker for a label not in classes_
+                if unseen.any():
+                    logger.warning(
+                        f"{col}: {unseen.sum()} of {len(values)} alerts have values not seen "
+                        f"in training, encoded as {UNSEEN_CATEGORY_CODE}: "
+                        f"{sorted({str(v) for v in values[unseen]})[:5]}"
                     )
-                except ValueError:
-                    # Handle unseen labels by fitting on current data
-                    unique_values = features_df[col].astype(str).unique()
-                    all_values = list(self.label_encoders[col].classes_) + list(
-                        unique_values
-                    )
-                    self.label_encoders[col].fit(all_values)
-                    features_df[f"{col}_encoded"] = self.label_encoders[col].transform(
-                        features_df[col].astype(str)
-                    )
+                features_df[f"{col}_encoded"] = np.where(
+                    unseen, UNSEEN_CATEGORY_CODE, codes
+                )
 
         # Create feature matrix
         feature_cols = self.feature_columns + [
