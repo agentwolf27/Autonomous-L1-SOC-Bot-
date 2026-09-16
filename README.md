@@ -6,7 +6,7 @@ A comprehensive **Level 1 Security Operations Center (SOC) automation bot** buil
 
 ### Core Capabilities
 - **🔍 SIEM Integration**: Ingest alerts from JSON/CSV files with normalized data structure
-- **🧩 Alert Enrichment**: Automatic WHOIS lookups, AbuseIPDB checks, and MITRE ATT&CK mapping
+- **🧩 Alert Enrichment**: MITRE ATT&CK mapping plus simulated WHOIS and AbuseIPDB lookups (stubs to replace with real API calls)
 - **🤖 AI Triage**: Machine learning-powered risk scoring using scikit-learn
 - **⚡ Automated Response**: Intelligent response actions based on risk levels
 - **📊 Real-time Dashboard**: Beautiful Flask web interface with live metrics
@@ -174,9 +174,9 @@ The triage engine uses scikit-learn with the following features:
 
 ### Machine Learning Model
 - **Algorithm**: Random Forest Classifier
-- **Features**: 15+ engineered features from enriched data
-- **Training**: Self-supervised learning from heuristic rules
-- **Accuracy**: Typically 85-90% on validation data
+- **Features**: 11 features from enriched data (7 numeric, 4 label-encoded categorical)
+- **Training**: Learns the rule-based rubric above from a fixed-seed set of 2,000 synthetic alerts. `triage()` trains it automatically when `triage_model.pkl` is missing; run `python train_model.py` to rebuild a stale model file
+- **Agreement with the rubric**: 93.8% ± 0.9% on 5 × 1,000 unseen synthetic alerts (majority-class baseline 49.4%). This measures how faithfully the model reproduces the rules, not accuracy against analyst verdicts
 
 ## ⚡ Response Actions
 
@@ -208,6 +208,9 @@ soc-automation-bot/
 ├── triage.py           # AI-powered risk assessment
 ├── response.py         # Automated response actions
 ├── dashboard.py        # Flask web dashboard
+├── train_model.py      # Rebuild triage_model.pkl from the reference dataset
+├── benchmark.py        # Reproducible pipeline and model benchmark
+├── tests/              # Integration and model tests
 ├── requirements.txt    # Python dependencies
 ├── Dockerfile         # Container configuration
 ├── README.md          # This file
@@ -283,8 +286,8 @@ def custom_response_action(alert):
 2. **Permission denied for iptables**
    - Run with sudo or modify response.py for your firewall
 
-3. **Model training errors**
-   - Ensure sufficient sample data exists
+3. **Model training errors or poor triage**
+   - Rebuild the model: `python train_model.py`
    - Check feature column availability
 
 4. **Dashboard not loading**
@@ -298,18 +301,28 @@ python main.py --debug
 
 ## 📈 Performance
 
-### Benchmarks (50 alerts)
-- **Ingestion**: ~0.1 seconds
-- **Enrichment**: ~2-5 seconds  
-- **Triage**: ~0.5 seconds
-- **Response**: ~1-2 seconds
-- **Total Pipeline**: ~4-8 seconds
+Reproduce with `python benchmark.py` (add `--json` for raw numbers). It runs in a temporary
+directory and takes about a minute. Figures below are from an Apple M2 with Python 3.13.
 
-### Scalability
-- **Memory Usage**: ~200-500 MB
-- **CPU Usage**: ~10-30% single core
-- **Throughput**: 500-1000 alerts/minute
-- **Storage**: ~1 MB per 1000 alerts
+Alerts, WHOIS and AbuseIPDB data are all synthetic, so these numbers describe the pipeline's
+behaviour, not detection quality on real traffic.
+
+| Metric | Result |
+|---|---|
+| 50-alert batch, end to end | 0.73 s ± 0.02 over 10 runs (enrichment 0.65 s, triage 0.04 s, response 0.04 s) |
+| Throughput | ~3,700 alerts/min at 500 alerts; ~3,100–3,300 at 1,000 |
+| Triage model vs rule-based rubric | 93.8% ± 0.9% on 5 × 1,000 unseen alerts (majority-class baseline 49.4%) |
+| Risk split, 1,000 alerts | 48.0% High / 31.1% Medium / 20.9% Low |
+| High-risk alerts per 50-alert batch | 25.0 ± 3.2 over 30 runs (range 18–30) |
+| MITRE ATT&CK coverage | 12 event types mapped to 19 distinct techniques |
+| Failed response actions, 1,000 alerts | 0 |
+
+- Enrichment sleeps 10 ms per alert to stand in for API calls, so it dominates runtime.
+- Response time grows faster than batch size because the monitoring queue, ticket and
+  blocked-IP files are read and rewritten for every alert.
+- The risk split comes from the sample generator: half of its 12 source IPs are flagged as
+  suspicious. High-risk alerts are ticketed and their source IP blocked, but a 1,000-alert run
+  only ever blocks 6 distinct IPs.
 
 ## 🤝 Contributing
 
