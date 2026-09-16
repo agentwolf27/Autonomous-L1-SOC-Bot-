@@ -19,3 +19,27 @@ pickle tied to the scikit-learn version, loading a pickle from a repo can execut
 *Revisit if:* analyst-labelled real alerts become available to train on, or the rubric in
 `create_training_data` changes (existing model files are not detected as stale; rerun
 `train_model.py`).
+
+## D2 — Encode unseen categorical values as -1 instead of refitting the encoder · taken · claude · 2026-09-16
+
+`prepare_features` looks each value up in the fitted `LabelEncoder.classes_` and encodes a
+value the model never saw as `UNSEEN_CATEGORY_CODE` (-1), logging a warning. The encoder is
+never refitted after training.
+
+*Reason:* The old fallback refitted the encoder on old + new values. `LabelEncoder` sorts its
+classes, so one unseen event type that sorts first ("AAA Unknown Event") shifted the code of
+every known event type in a 200-alert batch, changed 5 of those 200 risk levels, and stayed in
+the loaded encoder for the rest of the process. Rejected: appending new values after the
+existing classes instead of re-sorting (known codes stay put, but the loaded encoder still
+grows with every new value an alert source sends, and each gets a code the model was never
+trained on); encoding unseen values as `len(classes_)` (same stability, but the forest then
+scores them like the *last* class instead of the first, which is no less arbitrary).
+
+*Known cost:* every split on an encoded column has its threshold at 0.5 or above, so -1 always
+takes the same branch as code 0. An unseen value is scored exactly like the first trained class in sort
+order: event type → "Brute Force Attack", severity → "Critical", protocol → "ICMP", country →
+"CN". The rubric would instead give an unknown event type or country 0 points and an unknown
+severity the Low score. Stability was the goal here; the scoring meaning is task 8.
+
+*Revisit if:* real alerts start carrying values outside the synthetic vocabulary (the warning
+shows them), or task 8 trains a dedicated unseen bucket, which would replace the -1 sentinel.
