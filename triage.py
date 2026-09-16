@@ -7,10 +7,18 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report, accuracy_score
 import joblib
 import os
+import random
 from datetime import datetime
+
+from ingestion import generate_sample_alerts, normalize_alerts
+from enrichment import enrich_single_alert
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# The default model is trained on this fixed synthetic set, never on a live batch
+REFERENCE_TRAINING_ALERTS = 2000
+REFERENCE_TRAINING_SEED = 42
 
 
 class AlertTriageClassifier:
@@ -148,8 +156,8 @@ class AlertTriageClassifier:
             if X[col].dtype == "bool":
                 X[col] = X[col].astype(int)
 
-        # Fill NaN values with 0
-        X = X.fillna(0)
+        # Fill NaN values with 0 (infer dtypes first; fillna's implicit downcast is deprecated)
+        X = X.infer_objects().fillna(0)
 
         # Ensure all columns are numeric
         for col in X.columns:
@@ -196,6 +204,7 @@ class AlertTriageClassifier:
         logger.info("\nClassification Report:")
         logger.info(f"\n{classification_report(y_test, y_pred)}")
 
+        self.holdout_accuracy = accuracy
         self.is_trained = True
 
         return self
@@ -217,6 +226,12 @@ class AlertTriageClassifier:
         risk_scores = np.max(risk_probabilities, axis=1) * 100
 
         return risk_levels, risk_scores
+
+    def rubric_agreement(self, df):
+        """Fraction of alerts where the predicted risk level matches the rule-based rubric"""
+        expected = self.create_training_data(df)["risk_level"].astype(str).to_numpy()
+        predicted, _ = self.predict(df)
+        return float((predicted == expected).mean())
 
     def save_model(self, filepath="triage_model.pkl"):
         """Save trained model to disk"""
@@ -254,6 +269,41 @@ class AlertTriageClassifier:
             return False
 
 
+def build_reference_dataset(
+    num_alerts=REFERENCE_TRAINING_ALERTS, seed=REFERENCE_TRAINING_SEED
+):
+    """
+    Generate a reproducible set of enriched synthetic alerts.
+
+    Alert generation and the simulated enrichment both draw from Python's global RNG, so it
+    is seeded here and restored afterwards to leave the caller's randomness untouched.
+    """
+    state = random.getstate()
+    random.seed(seed)
+    try:
+        alerts = pd.DataFrame(normalize_alerts(generate_sample_alerts(num_alerts)))
+        # Call the per-alert enricher directly to skip enrich_alerts' simulated API delay
+        enrichment = pd.DataFrame(
+            [enrich_single_alert(row) for _, row in alerts.iterrows()]
+        )
+    finally:
+        random.setstate(state)
+    return pd.concat([alerts, enrichment], axis=1)
+
+
+def train_reference_model(
+    filepath="triage_model.pkl",
+    num_alerts=REFERENCE_TRAINING_ALERTS,
+    seed=REFERENCE_TRAINING_SEED,
+):
+    """Train the triage model on the reference dataset and save it to filepath"""
+    classifier = AlertTriageClassifier().train(
+        build_reference_dataset(num_alerts, seed)
+    )
+    classifier.save_model(filepath)
+    return classifier
+
+
 def triage(df):
     """
     Main triage function that classifies alerts and assigns risk scores
@@ -281,11 +331,11 @@ def triage(df):
     # Create triage classifier
     classifier = AlertTriageClassifier()
 
-    # Try to load existing model, otherwise train new one
+    # Try to load existing model, otherwise train one on the reference dataset.
+    # Training on the incoming batch left a 50-alert run with only 40 training rows.
     if not classifier.load_model():
-        logger.info("Training new triage model...")
-        classifier.train(df)
-        classifier.save_model()
+        logger.info("No saved model found, training on the reference dataset...")
+        classifier = train_reference_model()
 
     # Create result DataFrame
     triaged_df = df.copy()
