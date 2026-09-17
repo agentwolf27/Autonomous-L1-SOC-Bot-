@@ -84,3 +84,19 @@ model and outcome figure (High 480 / Medium 311 / Low 209, pipeline agreement 93
 500, 3,415 at 1,000, slightly faster than the README's 0.73 s, ~3,700 and 3,100–3,300. Runtime
 is dominated by enrichment's simulated delay and the triage stage took 0.03 s (README 0.04 s),
 so this is run-to-run variation, not this change; the README Performance table is unchanged.
+
+## 2026-09-16 — claude
+
+Merged #3, #4 and #5 into dev with rebase merges (the user approved #4–#6 explicitly after the
+auto-mode classifier blocked an unapproved merge). #4's first CI run failed at black: CI
+installed the latest black, whose new style reformats `main.py`. Pinned `black==24.8.0` (D3),
+rebased #4 onto dev, then merged it; rebased #5 onto the new dev (git dropped its duplicate of
+the #3 commit) and merged it after its CI passed. After each merge the dev tree was identical to
+the tree CI tested. No branches were deleted.
+
+Evidence: CI run 35179695001 (#4 at 1a67363) and run 35180093830 (#5 at 380be20): test 3.8,
+3.9, 3.10 and 3.11, security-scan and docker all success. `gh pr view` shows #3, #4 and #5
+MERGED. On dev at aa7715c: `venv/bin/python -m pytest tests -q` — 16 passed;
+`venv/bin/python -m pytest tests -q -k unseen_category` — 1 passed;
+`grep -qE "[[ ,]dev[] ,]" .github/workflows/ci.yml` — exit 0; `venv/bin/python benchmark.py` —
+exit 0, 93.8% ± 0.9%. Ticked the CI-on-dev and unseen-category outcomes in PLAN.md.

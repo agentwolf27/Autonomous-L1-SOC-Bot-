@@ -43,3 +43,17 @@ severity the Low score. Stability was the goal here; the scoring meaning is task
 
 *Revisit if:* real alerts start carrying values outside the synthetic vocabulary (the warning
 shows them), or task 8 trains a dedicated unseen bucket, which would replace the -1 sentinel.
+
+## D3 — Pin black to 24.8.0 in CI · taken · claude · 2026-09-16
+
+CI installs `black==24.8.0`; the formatting check still runs on every Python in the matrix.
+
+*Reason:* CI installed the latest black, and its 2026 stable style reformats the
+`print("""...""")` banner in `main.py`, so every run failed at the formatting step before any
+test ran. 24.8.0 is the newest black that installs on Python 3.8, the oldest matrix entry; the
+code passes it, the 24.10.0 in Anaconda and the 25.1.0 in the venv. Rejected: reformatting
+with black 26 (the venv's 25.1.0 would then disagree with CI); running the check once on 3.11
+with black 25.1.0 (the auto-mode classifier refused removing black from the shared install
+step, and the pin alone was enough).
+
+*Revisit if:* the matrix drops Python 3.8, at which point pin CI to the same black as the venv.
