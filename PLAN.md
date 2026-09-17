@@ -16,8 +16,8 @@ Tick one only when its VERIFY passes, not when someone says it is done.
 - [x] All tests pass with no failures — `venv/bin/python -m pytest tests -q`
 - [x] Default triage model matches the rule-based rubric on at least 90% of unseen alerts — `venv/bin/python -m pytest tests/test_model.py -q`
 - [x] Benchmark behind the README's Performance table runs end to end from a clean temporary directory — `venv/bin/python benchmark.py`
-- [ ] CI runs on pushes and pull requests to dev, not only main — `grep -qE "[[ ,]dev[] ,]" .github/workflows/ci.yml`
-- [ ] Alerts with unseen categories are encoded without shifting the codes of known categories — `venv/bin/python -m pytest tests -q -k unseen_category`
+- [x] CI runs on pushes and pull requests to dev, not only main — `grep -qE "[[ ,]dev[] ,]" .github/workflows/ci.yml`
+- [x] Alerts with unseen categories are encoded without shifting the codes of known categories — `venv/bin/python -m pytest tests -q -k unseen_category`
 - [ ] Dashboard displays real-time metrics and alert summaries — somebody opens http://localhost:5000 in a browser
 - [ ] Resume includes accurate, verifiable performance metrics — the user checks each figure against the README Performance table
 
