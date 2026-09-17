@@ -3,12 +3,14 @@
 Tests for the default triage model's training path
 """
 
+import copy
 import os
 import random
 import sys
 
 import numpy as np
 import pandas as pd
+import pytest
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,10 +18,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from enrichment import enrich_alerts
 from ingestion import generate_sample_alerts, normalize_alerts
 from triage import (
+    UNSEEN_CATEGORY,
     UNSEEN_CATEGORY_CODE,
+    AlertTriageClassifier,
     build_reference_dataset,
     train_reference_model,
 )
+
+CATEGORICAL_COLUMNS = ["event_type", "severity", "protocol", "source_whois_country"]
+
+
+@pytest.fixture(scope="module")
+def reference_model(tmp_path_factory):
+    return train_reference_model(
+        str(tmp_path_factory.mktemp("model") / "triage_model.pkl")
+    )
 
 
 def test_reference_model_matches_rubric_on_unseen_alerts(tmp_path, monkeypatch):
@@ -50,9 +63,9 @@ def test_reference_dataset_is_reproducible_and_leaves_global_rng_alone():
     )
 
 
-def test_unseen_category_leaves_known_codes_and_predictions_unchanged(tmp_path):
+def test_unseen_category_leaves_known_codes_and_predictions_unchanged(reference_model):
     """An event type the model never saw must not remap the categories it was trained on"""
-    model = train_reference_model(str(tmp_path / "triage_model.pkl"))
+    model = reference_model
     trained_classes = {
         col: encoder.classes_.copy() for col, encoder in model.label_encoders.items()
     }
@@ -70,7 +83,8 @@ def test_unseen_category_leaves_known_codes_and_predictions_unchanged(tmp_path):
     batch_features = model.prepare_features(batch)
     batch_levels, batch_scores = model.predict(batch)
 
-    assert batch_features["event_type_encoded"].iloc[0] == UNSEEN_CATEGORY_CODE
+    reserved_code = model.label_encoders["event_type"].transform([UNSEEN_CATEGORY])[0]
+    assert batch_features["event_type_encoded"].iloc[0] == reserved_code
     pd.testing.assert_frame_equal(
         batch_features.iloc[1:].reset_index(drop=True), known_features
     )
@@ -82,3 +96,56 @@ def test_unseen_category_leaves_known_codes_and_predictions_unchanged(tmp_path):
     np.testing.assert_array_equal(batch_scores[1:], known_scores)
     for col, classes in trained_classes.items():
         np.testing.assert_array_equal(model.label_encoders[col].classes_, classes)
+
+
+@pytest.mark.parametrize(
+    "columns, minimum",
+    [
+        (["event_type"], 0.9),
+        (["severity"], 0.9),
+        (["protocol"], 0.9),
+        # Even a model trained with the country hidden on every row matches the
+        # rubric on only about 90% of alerts whose country it has never seen
+        (["source_whois_country"], 0.85),
+        (CATEGORICAL_COLUMNS, 0.85),
+    ],
+    ids=["event_type", "severity", "protocol", "country", "all"],
+)
+def test_unseen_category_scored_like_rubric(reference_model, columns, minimum):
+    """Values the model never saw get the risk level the rubric gives them"""
+    alerts = build_reference_dataset(1000, seed=2024)
+    alerts = alerts.assign(**{col: "Never Seen Value" for col in columns})
+    assert reference_model.rubric_agreement(alerts) >= minimum
+
+
+def test_unseen_category_copies_hide_at_least_one_value_per_row():
+    alerts = build_reference_dataset(300, seed=6)
+    expanded = AlertTriageClassifier().with_unseen_category_copies(alerts, copies=2)
+
+    assert len(expanded) == 900
+    pd.testing.assert_frame_equal(expanded.iloc[:300], alerts)
+    hidden = expanded.iloc[300:][CATEGORICAL_COLUMNS] == UNSEEN_CATEGORY
+    assert hidden.any(axis=1).all()
+    assert not hidden.all(axis=1).all()
+    # Only categorical values are hidden; the rest of each copy matches its row
+    for start in (300, 600):
+        copy_rows = expanded.iloc[start : start + 300].reset_index(drop=True)
+        pd.testing.assert_frame_equal(
+            copy_rows.drop(columns=CATEGORICAL_COLUMNS),
+            alerts.drop(columns=CATEGORICAL_COLUMNS),
+        )
+
+
+def test_unseen_category_encoded_as_sentinel_by_model_without_reserved_label(
+    reference_model,
+):
+    """A model saved before unseen-category training still predicts, using -1 (D2)"""
+    model = copy.deepcopy(reference_model)
+    encoder = model.label_encoders["event_type"]
+    encoder.classes_ = encoder.classes_[encoder.classes_ != UNSEEN_CATEGORY]
+
+    alerts = build_reference_dataset(20, seed=5).assign(event_type="Never Seen Value")
+    features = model.prepare_features(alerts)
+    assert (features["event_type_encoded"] == UNSEEN_CATEGORY_CODE).all()
+    levels, _ = model.predict(alerts)
+    assert len(levels) == len(alerts)

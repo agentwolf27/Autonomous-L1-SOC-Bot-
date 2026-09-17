@@ -100,3 +100,47 @@ MERGED. On dev at aa7715c: `venv/bin/python -m pytest tests -q` — 16 passed;
 `venv/bin/python -m pytest tests -q -k unseen_category` — 1 passed;
 `grep -qE "[[ ,]dev[] ,]" .github/workflows/ci.yml` — exit 0; `venv/bin/python benchmark.py` —
 exit 0, 93.8% ± 0.9%. Ticked the CI-on-dev and unseen-category outcomes in PLAN.md.
+
+## 2026-09-16 — claude
+
+Task 8. On dev, the -1 sentinel (D2) matched the rubric on 88.3% of alerts with an unseen
+event type, 74.4% with an unseen severity, 76.4% with an unseen country and 39.8% with all four
+unseen (5 × 1,000 alerts, benchmark seeds). Compared two fixes on scratch copies before
+changing anything: mapping unseen values to a rubric-neutral known class, and training on
+rubric-labelled copies with a reserved `__unseen__` value. The copies won, especially with all
+four unseen (D4). Chose the variant and copy count on separate seeds (2001–2005), then checked
+five RNG seeds: one copy per row was too sensitive to which values were hidden, so training
+uses two.
+
+`train()` now holds out 20% of the real alerts before adding the copies, so the holdout score
+is measured on real rows only. `prepare_features` encodes unseen values as `__unseen__`, or as
+-1 with a warning for model files saved before this change. `benchmark.py` adds a row for
+unseen categories, including a model trained with no country (90.7%), the best case for an
+unseen country. README: model agreement 93.8% → 94.0% ± 0.9%, risk split 31.1/20.9 →
+31.3/20.7 Medium/Low, and a new unseen-categories row. Correction to task 3: its VERIFY
+grepped for the old "93.8% ± 0.9%", so it now greps for "94.0% ± 0.9%". Added the PLAN outcome
+for task 8 unticked; the hook ran its VERIFY in the main checkout (dev), where the test does
+not exist yet, so tick it once this merges. The main checkout's `triage_model.pkl` predates
+`__unseen__` (task 10).
+
+As before, commands ran from the worktree with the main checkout's interpreter, and
+`graphify-out/` was not refreshed.
+
+Evidence: `venv/bin/python -m pytest tests -q -k unseen_category_scored_like_rubric` — on dev
+(e73d103, main checkout) "16 deselected", exit 5; on this branch "5 passed, 18 deselected",
+exit 0. The new tests against dev's `triage.py` (plus the constant): 6 failed, 4 passed
+(the rubric test at 0.879, 0.756, 0.78 and 0.41; the protocol case and the -1 fallback test
+pass on both). `venv/bin/python -m pytest tests -q -k unseen_category` — 8 passed.
+`venv/bin/python -m pytest tests -q` — 23 passed. `black --check .` — clean with 25.1.0
+(venv) and with 24.10.0 `--target-version py38` (Anaconda); Anaconda flake8 7.1.1 with CI's
+`--select=E9,F63,F7,F82` — 0.
+`venv/bin/python benchmark.py` — exit 0, 0 bytes on stderr. Agreement 94.0% ± 0.9% (was
+93.8% ± 0.9% on the same seeds); unseen event type 95.9%, severity 93.1%, protocol 94.0%,
+country 88.7%, all four 90.6%; High 480 / Medium 313 / Low 207 (was 311 / 209); pipeline
+agreement 93.2% (was 93.4%); High per 50 unchanged at 25.0 ± 3.2. The 1,000-alert run has no
+values missing from the reference set, so its 2 alerts moved from Low to Medium come from the
+retrained model, not from unseen values. Timings across two runs of the final code: 50-alert batch 0.69–0.76 s, 3,347–3,742
+alerts/min at 500, 3,061–3,208 at 1,000, triage 0.03 s both times. The spread is in
+enrichment's simulated delay and the response file writes, so the README timings are
+unchanged. `grep -qa __unseen__ triage_model.pkl` — exit 0 on a model trained by this branch,
+exit 1 on the main checkout's current file.

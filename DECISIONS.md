@@ -57,3 +57,42 @@ with black 25.1.0 (the auto-mode classifier refused removing black from the shar
 step, and the pin alone was enough).
 
 *Revisit if:* the matrix drops Python 3.8, at which point pin CI to the same black as the venv.
+
+## D4 — Train the model on a reserved unseen value instead of mapping unseen values to a known class · taken · claude · 2026-09-16
+
+Supersedes D2's -1 sentinel for models trained from now on; -1 remains only for model files
+saved before this change. `train()` holds out 20% of the real alerts first, then trains on the
+rest plus two copies of them. Each copy has a random, non-empty subset of `event_type`,
+`severity`, `protocol` and `source_whois_country` replaced by `UNSEEN_CATEGORY`
+(`"__unseen__"`), and the rubric labels the copies. `prepare_features` encodes a value missing
+from the fitted classes as `UNSEEN_CATEGORY`.
+
+*Reason:* The rubric already says what an unknown value means: no points for an unknown event
+type or country, and Low for an unknown severity. Labelling copies with it teaches the model
+that meaning without writing it down a second time. Rubric agreement on 5 × 1,000 alerts:
+
+| Unseen value in | -1 sentinel (D2) | Map to a neutral known class | This decision |
+|---|---|---|---|
+| event type | 88.3% | 94.6% | 95.9% |
+| severity | 74.4% | 93.1% | 93.1% |
+| protocol | 94.1% | 93.9% | 94.0% |
+| country | 76.4% | 88.5% | 88.7% |
+| all four | 39.8% | 70.6% | 90.6% |
+
+Known alerts go from 93.8% to 94.0%. Rejected: mapping unseen values to a rubric-neutral
+known class ("Suspicious Network Traffic", "Low", "TCP", "US"). It needs no retraining, but
+it copies the rubric's meaning into a second table that has to be kept in sync, and scores
+only 70.6% when all four values are unseen. Also rejected: one copy per row. Across five RNG
+seeds, all four unseen scored between 84.6% and 87.5%, and on one seed the test's unseen
+country was 0.8 points above its threshold. Two copies gave 88.2–88.6% across three seeds
+in the same trial, and 90.6% as implemented.
+
+*Known cost:* the country case stays the weakest. A model trained with no country at all
+reaches only 90.7% on those alerts (`benchmark.py` reports both). Model files saved before
+this change have no `__unseen__` class, so they keep D2's behaviour, with a warning on each
+batch that holds an unseen value, until rebuilt with `train_model.py`. Nothing checks for
+this when a model is loaded.
+
+*Revisit if:* the rubric in `create_training_data` gains or loses a categorical factor, or
+real alerts show unseen values clustering in one column, which might warrant extra copies
+that hide only that column.

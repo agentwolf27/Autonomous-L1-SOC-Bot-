@@ -176,7 +176,8 @@ The triage engine uses scikit-learn with the following features:
 - **Algorithm**: Random Forest Classifier
 - **Features**: 11 features from enriched data (7 numeric, 4 label-encoded categorical)
 - **Training**: Learns the rule-based rubric above from a fixed-seed set of 2,000 synthetic alerts. `triage()` trains it automatically when `triage_model.pkl` is missing; run `python train_model.py` to rebuild a stale model file
-- **Agreement with the rubric**: 93.8% ± 0.9% on 5 × 1,000 unseen synthetic alerts (majority-class baseline 49.4%). This measures how faithfully the model reproduces the rules, not accuracy against analyst verdicts
+- **Unseen categories**: an event type, severity, protocol or country the model never saw is scored as a reserved `__unseen__` value. Training adds two copies of each training alert with random categorical values replaced by it, labelled by the rubric, so an unknown event type or country adds no risk and an unknown severity counts as Low. Categories are never re-encoded after training
+- **Agreement with the rubric**: 94.0% ± 0.9% on 5 × 1,000 unseen synthetic alerts (majority-class baseline 49.4%). This measures how faithfully the model reproduces the rules, not accuracy against analyst verdicts
 
 ## ⚡ Response Actions
 
@@ -311,8 +312,9 @@ behaviour, not detection quality on real traffic.
 |---|---|
 | 50-alert batch, end to end | 0.73 s ± 0.02 over 10 runs (enrichment 0.65 s, triage 0.04 s, response 0.04 s) |
 | Throughput | ~3,700 alerts/min at 500 alerts; ~3,100–3,300 at 1,000 |
-| Triage model vs rule-based rubric | 93.8% ± 0.9% on 5 × 1,000 unseen alerts (majority-class baseline 49.4%) |
-| Risk split, 1,000 alerts | 48.0% High / 31.1% Medium / 20.9% Low |
+| Triage model vs rule-based rubric | 94.0% ± 0.9% on 5 × 1,000 unseen alerts (majority-class baseline 49.4%) |
+| Same alerts, with a categorical value the model never saw | event type 95.9%, severity 93.1%, protocol 94.0%, country 88.7%, all four at once 90.6% |
+| Risk split, 1,000 alerts | 48.0% High / 31.3% Medium / 20.7% Low |
 | High-risk alerts per 50-alert batch | 25.0 ± 3.2 over 30 runs (range 18–30) |
 | MITRE ATT&CK coverage | 12 event types mapped to 19 distinct techniques |
 | Failed response actions, 1,000 alerts | 0 |
@@ -323,6 +325,8 @@ behaviour, not detection quality on real traffic.
 - The risk split comes from the sample generator: half of its 12 source IPs are flagged as
   suspicious. High-risk alerts are ticketed and their source IP blocked, but a 1,000-alert run
   only ever blocks 6 distinct IPs.
+- An unseen country is the hardest case: even a model trained with no country at all matches
+  the rubric on only 90.7% of those alerts, against 88.7% for the default model.
 
 ## 🤝 Contributing
 
