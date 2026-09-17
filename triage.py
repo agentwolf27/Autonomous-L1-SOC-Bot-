@@ -20,7 +20,10 @@ logger = logging.getLogger(__name__)
 REFERENCE_TRAINING_ALERTS = 2000
 REFERENCE_TRAINING_SEED = 42
 
-# Encoded value for a categorical value the model never saw in training
+# Categorical values the model never saw in training are scored as this reserved label;
+# train() teaches the model what the rubric says about it (with_unseen_category_copies)
+UNSEEN_CATEGORY = "__unseen__"
+# Encoded value for unseen values when the model was trained without UNSEEN_CATEGORY
 UNSEEN_CATEGORY_CODE = -1
 
 
@@ -122,20 +125,27 @@ class AlertTriageClassifier:
                 if col not in self.label_encoders:
                     self.label_encoders[col] = LabelEncoder().fit(values)
 
-                # A label's code is its position in the sorted classes_, as transform() gives.
-                # Unseen labels get a sentinel instead of a refit: refitting re-sorts classes_
-                # and shifts the codes of every category the model was trained on.
-                codes = pd.Index(self.label_encoders[col].classes_).get_indexer(values)
+                # A label's code is its position in the sorted classes_, as transform()
+                # gives. Unseen labels take UNSEEN_CATEGORY's code instead of a refit:
+                # refitting re-sorts classes_ and shifts the codes of known categories.
+                classes = pd.Index(self.label_encoders[col].classes_)
+                codes = classes.get_indexer(values)
                 unseen = codes == -1  # get_indexer's marker for a label not in classes_
                 if unseen.any():
+                    reserved = classes.get_indexer([UNSEEN_CATEGORY])[0]
+                    outcome = f"scored as {UNSEEN_CATEGORY!r}"
+                    if reserved == -1:
+                        # The model predates unseen-category training; its forest
+                        # scores this sentinel like the first class in sort order (D2)
+                        reserved = UNSEEN_CATEGORY_CODE
+                        outcome = f"encoded as {reserved}; run train_model.py"
+                    preview = sorted({str(v) for v in values[unseen]})[:5]
                     logger.warning(
-                        f"{col}: {unseen.sum()} of {len(values)} alerts have values not seen "
-                        f"in training, encoded as {UNSEEN_CATEGORY_CODE}: "
-                        f"{sorted({str(v) for v in values[unseen]})[:5]}"
+                        f"{col}: {unseen.sum()} of {len(values)} alerts have values "
+                        f"not seen in training, {outcome}: {preview}"
                     )
-                features_df[f"{col}_encoded"] = np.where(
-                    unseen, UNSEEN_CATEGORY_CODE, codes
-                )
+                    codes[unseen] = reserved
+                features_df[f"{col}_encoded"] = codes
 
         # Create feature matrix
         feature_cols = self.feature_columns + [
@@ -179,24 +189,55 @@ class AlertTriageClassifier:
 
         return X
 
+    def with_unseen_category_copies(self, df, copies=2, seed=0):
+        """
+        Return df followed by `copies` copies of its rows, each copy with a random,
+        non-empty subset of its categorical values replaced by UNSEEN_CATEGORY.
+
+        Labelled by the rubric, the copies teach the model what the rubric says about
+        values it has never seen, alone or together. One copy left the result sensitive
+        to which values happened to be hidden; two steady it. Uses its own RNG, so the
+        global random state is untouched.
+        """
+        columns = [col for col in self.categorical_columns if col in df.columns]
+        if not columns:
+            return df
+
+        rng = np.random.RandomState(seed)
+        parts = [df]
+        for _ in range(copies):
+            hidden = rng.rand(len(df), len(columns)) < 0.5
+            # A copy with nothing hidden would just repeat its row: hide one value there
+            rows = np.flatnonzero(~hidden.any(axis=1))
+            hidden[rows, rng.randint(len(columns), size=len(rows))] = True
+
+            part = df.copy()
+            for i, col in enumerate(columns):
+                part[col] = part[col].astype(str).where(~hidden[:, i], UNSEEN_CATEGORY)
+            parts.append(part)
+        return pd.concat(parts, ignore_index=True)
+
     def train(self, df):
         """Train the classification model"""
         logger.info("Training triage classification model...")
 
-        # Create training data with labels
+        # Create training data with labels, and hold out 20% of the real alerts
         training_df = self.create_training_data(df)
-
-        # Prepare features
-        X = self.prepare_features(training_df)
-        y = training_df["risk_level"]
-
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
+        train_df, test_df = train_test_split(
+            training_df,
+            test_size=0.2,
+            random_state=42,
+            stratify=training_df["risk_level"],
         )
 
+        # Train on the rest plus rubric-labelled copies with some categories unseen
+        train_df = self.create_training_data(self.with_unseen_category_copies(train_df))
+        X_train = self.prepare_features(train_df)
+        X_test = self.prepare_features(test_df)
+        y_test = test_df["risk_level"]
+
         # Train model
-        self.model.fit(X_train, y_train)
+        self.model.fit(X_train, train_df["risk_level"])
 
         # Evaluate
         y_pred = self.model.predict(X_test)

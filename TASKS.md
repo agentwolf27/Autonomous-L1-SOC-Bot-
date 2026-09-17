@@ -12,12 +12,13 @@ so it is counted as uncheckable rather than quietly counted as passed.
 
 | # | Task | Owner | VERIFY |
 |---|------|-------|--------|
+| 9 | Review and merge the PR from fix/unseen-category-rubric-neutral into dev | user | the PR shows as merged on GitHub |
 
 ## Queued
 
 | # | Task | Owner | VERIFY |
 |---|------|-------|--------|
-| 8 | Give unseen categorical values a rubric-neutral meaning: the `-1` sentinel is scored like the first class in sort order (an unseen severity like "Critical", an unseen country like "CN"), e.g. by training on a dedicated unseen bucket labelled by the rubric (see D2) | claude | `venv/bin/python -m pytest tests -q -k unseen_category_scored_like_rubric` exits 0 |
+| 10 | After task 9 merges, rebuild the main checkout's stale `triage_model.pkl` with `venv/bin/python train_model.py` (until then it scores unseen values with the -1 sentinel, D2) | user | `grep -qa __unseen__ triage_model.pkl` exits 0 |
 
 ## Done
 
@@ -25,8 +26,9 @@ so it is counted as uncheckable rather than quietly counted as passed.
 |---|------|-------|--------|-----------|
 | 1 | Add reproducible benchmark (`benchmark.py`) | claude | `venv/bin/python benchmark.py` exits 0 | 2026-09-16 |
 | 2 | Train the default triage model on a fixed-seed 2,000-alert reference set; add `train_model.py` | claude | `venv/bin/python -m pytest tests/test_model.py -q` exits 0 | 2026-09-16 |
-| 3 | Replace unmeasured README accuracy and performance figures with benchmark results | claude | `grep -q "93.8% ± 0.9%" README.md` exits 0 | 2026-09-16 |
+| 3 | Replace unmeasured README accuracy and performance figures with benchmark results | claude | `grep -q "94.0% ± 0.9%" README.md` exits 0 | 2026-09-16 |
 | 6 | Stop `prepare_features` re-fitting a LabelEncoder on unseen categories, which can shift the codes of known ones; add a test named for unseen_category | claude | `venv/bin/python -m pytest tests -q -k unseen_category` exits 0 | 2026-09-16 |
 | 4 | Review and merge the PR from feat/benchmark-reference-model into dev | user | the PR shows as merged on GitHub | 2026-09-16 |
 | 5 | Run CI on pushes and PRs to dev (ci.yml only triggers for main and develop) | user | `grep -qE "[[ ,]dev[] ,]" .github/workflows/ci.yml` exits 0 | 2026-09-16 |
 | 7 | Review and merge the PR from fix/unseen-category-encoding into dev (stacked on the task 4 PR; rebase onto dev after that merges) | user | the PR shows as merged on GitHub | 2026-09-16 |
+| 8 | Give unseen categorical values a rubric-neutral meaning: the `-1` sentinel is scored like the first class in sort order (an unseen severity like "Critical", an unseen country like "CN"), e.g. by training on a dedicated unseen bucket labelled by the rubric (see D2) | claude | `venv/bin/python -m pytest tests -q -k unseen_category_scored_like_rubric` exits 0 | 2026-09-16 |

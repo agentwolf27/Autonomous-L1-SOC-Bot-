@@ -43,6 +43,15 @@ RUNTIME_FILES = [
     "soc_alerts.log",
 ]
 EVAL_SEEDS = [1001, 1002, 1003, 1004, 1005]
+# Categorical columns replaced by a value the model never saw, per unseen-category scenario
+UNSEEN_VALUE = "Never Seen Value"
+UNSEEN_SCENARIOS = {
+    "event type": ["event_type"],
+    "severity": ["severity"],
+    "protocol": ["protocol"],
+    "country": ["source_whois_country"],
+    "all four": ["event_type", "severity", "protocol", "source_whois_country"],
+}
 
 
 def seeded_alerts(num_alerts, seed):
@@ -51,6 +60,11 @@ def seeded_alerts(num_alerts, seed):
     df = pd.DataFrame(normalize_alerts(generate_sample_alerts(num_alerts)))
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     return df.sort_values("timestamp").reset_index(drop=True)
+
+
+def replace_categories(df, columns):
+    """Give every alert the same value in these categorical columns"""
+    return df.assign(**{col: UNSEEN_VALUE for col in columns})
 
 
 def run_pipeline(num_alerts, seed):
@@ -160,7 +174,27 @@ def run_benchmark():
             [reference.rubric_agreement(df) for df in eval_sets]
         ),
         "majority_class_baseline": round(statistics.mean(majority), 3),
+        "reference_model_agreement_5x1000_unseen_categories": {
+            name: mean_sd(
+                [
+                    reference.rubric_agreement(replace_categories(df, columns))
+                    for df in eval_sets
+                ]
+            )
+            for name, columns in UNSEEN_SCENARIOS.items()
+        },
     }
+    # Best case for an unseen country: the same training with no country to learn from
+    country = UNSEEN_SCENARIOS["country"]
+    no_country = AlertTriageClassifier().train(
+        replace_categories(build_reference_dataset(), country)
+    )
+    model["no_country_model_agreement_5x1000_unseen_country"] = mean_sd(
+        [
+            no_country.rubric_agreement(replace_categories(df, country))
+            for df in eval_sets
+        ]
+    )
     local = AlertTriageClassifier()
     if local.load_model(REPO_MODEL):
         model["repo_triage_model_pkl_agreement_5x1000_unseen"] = mean_sd(
@@ -183,6 +217,8 @@ def to_markdown(r):
     high = r["high_risk_per_50_alerts_30_runs"]
     m = r["model"]
     agree = m["reference_model_agreement_5x1000_unseen"]
+    unseen = m["reference_model_agreement_5x1000_unseen_categories"]
+    no_country = m["no_country_model_agreement_5x1000_unseen_country"]
     rows = [
         (
             "MITRE ATT&CK coverage",
@@ -224,6 +260,14 @@ def to_markdown(r):
             f"(trained on {m['trained_on_alerts']:,})",
             f"{agree['mean']:.1%} ± {agree['sd']:.1%} "
             f"(majority-class baseline {m['majority_class_baseline']:.1%})",
+        ),
+        (
+            "Same, with categorical values the model never saw",
+            ", ".join(
+                f"{name} {v['mean']:.1%} ± {v['sd']:.1%}" for name, v in unseen.items()
+            )
+            + f" (a model trained without countries: {no_country['mean']:.1%} "
+            f"on the unseen-country alerts)",
         ),
         (
             "Pipeline triage vs rubric, 1,000-alert run",

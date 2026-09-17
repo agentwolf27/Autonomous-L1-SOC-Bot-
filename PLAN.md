@@ -18,6 +18,7 @@ Tick one only when its VERIFY passes, not when someone says it is done.
 - [x] Benchmark behind the README's Performance table runs end to end from a clean temporary directory — `venv/bin/python benchmark.py`
 - [x] CI runs on pushes and pull requests to dev, not only main — `grep -qE "[[ ,]dev[] ,]" .github/workflows/ci.yml`
 - [x] Alerts with unseen categories are encoded without shifting the codes of known categories — `venv/bin/python -m pytest tests -q -k unseen_category`
+- [ ] Alerts with categorical values the model never saw match the rubric on at least 90% (85% for an unseen country, or all four unseen) — `venv/bin/python -m pytest tests -q -k unseen_category_scored_like_rubric`
 - [ ] Dashboard displays real-time metrics and alert summaries — somebody opens http://localhost:5000 in a browser
 - [ ] Resume includes accurate, verifiable performance metrics — the user checks each figure against the README Performance table
 
